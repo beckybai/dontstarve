@@ -22,6 +22,7 @@ from time import time
 
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
+
 # %matplotlib inline
 
 from scipy.spatial import KDTree
@@ -47,13 +48,13 @@ logging = tf.logging
 flags.DEFINE_integer("batch_size", 128, "batch size")
 flags.DEFINE_integer("updates_per_epoch", 1000, "number of updates per epoch")
 flags.DEFINE_integer("max_epoch", 100, "max epoch")
-flags.DEFINE_float("learning_rate", 1e-2, "learning rate")
+flags.DEFINE_float("learning_rate", 1e-4, "learning rate")
 flags.DEFINE_string("working_directory", "", "")
 flags.DEFINE_integer("hidden_size", 50, "size of the hidden VAE unit")
 # flags.DEFINE_integer("hidden_size", 2, "size of the hidden VAE unit")
 
 flags.DEFINE_float("lam", 10, "regularization parameter")
-flags.DEFINE_integer("dim", 28*28, "dimensionality of the image")
+flags.DEFINE_integer("dim", 784, "dimensionality of the image")
 flags.DEFINE_integer("tan_dim", 5, "dimensionality of the tagent space")
 flags.DEFINE_float("sig",10.0,"kernel bandwidth parameter")
 
@@ -73,28 +74,40 @@ def discriminator(input_tensor):
 
 	return (pt.wrap(input_tensor).
 	        reshape([FLAGS.batch_size, 28, 28, 1]).
-	        conv2d(5, 32, stride=2).
-	        conv2d(5, 64, stride=2).
-	        conv2d(5, 128, edges='VALID').
-	        dropout(0.9).
+	        conv2d(5, 32, stride=1,activation_fn=tf.nn.relu).
+                max_pool(2,2).
+	        conv2d(5, 64, stride=1,activation_fn=tf.nn.relu).
+                #relu().
+                max_pool(2,2).
+	        conv2d(3, 128, stride=1,activation_fn=tf.nn.relu).
+                #relu().
+	        max_pool(2,2).
 	        flatten().
-	        fully_connected(1, activation_fn=None)).tensor
+	        fully_connected(36, activation_fn=tf.nn.elu).
+                fully_connected(1,activation_fn=tf.sigmoid)).tensor
 
 
 def generator(Z=None):
 	'''Create a generator network
 
 	'''
+
 	tf.set_random_seed(round(time()))
 	if Z == None:
 		Z = tf.random_uniform([FLAGS.batch_size, FLAGS.hidden_size])
 
 	return (pt.wrap(Z).
 	        reshape([FLAGS.batch_size, 1, 1, FLAGS.hidden_size]).
-	        deconv2d(3, 128, edges='VALID').
-	        deconv2d(5, 64, edges='VALID').
-	        deconv2d(5, 32, stride=2).
-	        deconv2d(5, 1, stride=2, activation_fn=tf.nn.sigmoid).
+	        deconv2d(4, 128, stride=1,edges='VALID'). # 4*4
+                batch_normalize().
+                relu().
+                #tf.nn.deconv2d(4,64,stride=2
+	        deconv2d(5, 64, stride=2,edges='VALID'). #11*11
+                batch_normalize().
+                relu().
+	        deconv2d(4, 32, stride=2,edges='VALID'). #24*24
+                #deconv2d(4, 64, stride=3).
+	        deconv2d(5, 1, stride=1,edges='VALID',activation_fn=tf.nn.sigmoid). # 16*16
 	        flatten()).tensor
 
 
@@ -103,7 +116,7 @@ def chi2_loss(Xn, Yn):
 	chi2 = tf.reduce_sum(tf.square(C))
 	return chi2
 
-mnist = input_data.read_data_sets("/home/becky/MNIST_data/", one_hot=True)
+mnist = input_data.read_data_sets("~/gits/dontstarve/frey-chi2-net-code/MNIST_data/", one_hot=True)
 input_tensor = tf.placeholder(tf.float32, [FLAGS.batch_size, FLAGS.dim])
 learning_rate = tf.placeholder(tf.float32)
 # input_code = tf.placeholder(tf.float32, [FLAGS.batch_size, FLAGS.hidden_size])
@@ -191,7 +204,7 @@ for epoch_id in range(max_epoch):
 	t0 = time()
 
 	for step in range(updates_per_epoch):
-		#         x,_ = frey_data.next_batch(FLAGS.batch_size)
+		x,_ = mnist.train.next_batch(FLAGS.batch_size)
 
 		_, loss_val, _ = sess.run([train_gan_discr, discr_loss, maintain_averages_op],
 		                          {input_tensor: x, learning_rate: lr_discr})
