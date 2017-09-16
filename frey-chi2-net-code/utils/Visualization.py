@@ -1,5 +1,8 @@
 import numpy as np
 import os
+#import matplotlib.pyplot as plt
+import matplotlib as mpl
+mpl.use('Agg')
 import matplotlib.pyplot as plt
 
 def show_img(X,M=5,x0=[],size=[28,28]):
