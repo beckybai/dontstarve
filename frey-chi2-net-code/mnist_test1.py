@@ -41,8 +41,8 @@ from utils.Model import save_model_params,restore_model_params
 #matplotlib.use('Agg')
 config = tf.ConfigProto()
 config.log_device_placement = True
-#config.gpu_options.allow_growth = True
-#config.allow_soft_placement=True
+config.gpu_options.allow_growth = True
+config.allow_soft_placement=True
 sess = tf.Session(config=config)
 
 flags = tf.flags
