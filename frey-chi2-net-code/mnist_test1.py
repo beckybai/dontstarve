@@ -41,7 +41,7 @@ from utils.Model import save_model_params,restore_model_params
 #matplotlib.use('Agg')
 config = tf.ConfigProto()
 config.log_device_placement = True
-#config.gpu_options.allow_growth = True
+config.gpu_options.allow_growth = True
 #config.allow_soft_placement=True
 sess = tf.Session(config=config)
 
@@ -130,7 +130,7 @@ ema = tf.train.ExponentialMovingAverage(decay=0.8)
 label = tf.constant(np.concatenate((np.ones([FLAGS.batch_size, 1]), \
                                     -np.ones([FLAGS.batch_size, 1]))), dtype=tf.float32)
 
-with tf.device('/gpu:0'):
+with tf.device('/gpu:1'):
 	with pt.defaults_scope(activation_fn=tf.nn.elu,
 	                       batch_normalize=True,
 	                       learned_moments_update_rate=0.0003,
@@ -184,12 +184,12 @@ print("ha@@@@")
 sess.run(init)
 print("ha?")
 
-lr_discr = 5e-4
+lr_discr = 1e-3
 lr_gener = 1e-3
 
-max_epoch = 200
+max_epoch = 300
 print_epoch = 5
-updates_per_epoch = 100
+updates_per_epoch = 50
 # max_epoch = 10
 # updates_per_epoch = 100
 # max_epoch = 500
@@ -256,7 +256,7 @@ for epoch_id in range(max_epoch):
 		x2 = sess.run(generated_tensor)
 		show_img(x2, M=5, size=[28, 28])
 		_ = plt.title('Generated Samples')
-		plt.savefig('./result/mnist1/{}_gen.png'.format(epoch_id))
+		plt.savefig('./result/mnist2/{}_gen.png'.format(epoch_id))
 		# plt.show()
 		# Draw 10000 generated samples and compare with the original data
 
