@@ -103,6 +103,7 @@ venv.bak/
 
 #result
 ./result/
+.result/
 *.png
 *.jpg
 

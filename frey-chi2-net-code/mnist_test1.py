@@ -42,7 +42,11 @@ from utils.Model import save_model_params,restore_model_params
 config = tf.ConfigProto()
 config.log_device_placement = True
 config.gpu_options.allow_growth = True
+#<<<<<<< HEAD
+config.allow_soft_placement=True
+#=======
 #config.allow_soft_placement=True
+#>>>>>>> 1216f9d3fab668aab66bf09d04f9415267f32f20
 sess = tf.Session(config=config)
 
 flags = tf.flags
