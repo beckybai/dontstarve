@@ -66,58 +66,44 @@ FLAGS = flags.FLAGS
 
 
 def discriminator(input_tensor):
-	'''Create discriminator network.
+    '''Create discriminator network.
 
-	Args:
-		input_tensor: a batch of flattened images [batch_size, 28*28]
+    Args:
+        input_tensor: a batch of flattened images [batch_size, 28*28]
 
-	Returns:
-		A tensor that expresses the logit of being a true sample
-	'''
+    Returns:
+        A tensor that expresses the logit of being a true sample
+    '''
 
-	return (pt.wrap(input_tensor).
-	        reshape([FLAGS.batch_size, 28, 28, 1]).
-	        conv2d(5, 32, stride=1,activation_fn=tf.nn.relu).
-                max_pool(2,2).
-	        conv2d(5, 64, stride=1,activation_fn=tf.nn.relu).
-                #relu().
-                max_pool(2,2).
-	        conv2d(3, 128, stride=1,activation_fn=tf.nn.relu).
-                #relu().
-	        max_pool(2,2).
-	        flatten().
-	        fully_connected(36, activation_fn=tf.nn.elu).
-                fully_connected(1,activation_fn=tf.sigmoid)).tensor
-
+    return (pt.wrap(input_tensor).
+            reshape([FLAGS.batch_size, 28, 28, 1]).
+            conv2d(5, 32, stride=2).
+            conv2d(5, 64, stride=2).
+            conv2d(5, 128, edges='VALID').
+            dropout(0.9).
+            flatten().
+            fully_connected(1, activation_fn=None)).tensor
 
 def generator(Z=None):
-	'''Create a generator network
+    '''Create a generator network
+    
+    '''
+    if Z==None:
+        Z = tf.random_uniform([FLAGS.batch_size,FLAGS.hidden_size])
+    
+    return (pt.wrap(Z).
+            reshape([FLAGS.batch_size, 1, 1, FLAGS.hidden_size]).
+            deconv2d(3, 128, edges='VALID').
+            deconv2d(5, 64, edges='VALID').
+            deconv2d(5, 32, stride=2).
+            deconv2d(5, 1, stride=2, activation_fn=tf.nn.sigmoid).
+            flatten()).tensor
 
-	'''
+def chi2_loss(Xn,Yn):
+    C = tf.matmul(Xn,Yn,transpose_a=True)/(2*FLAGS.batch_size) # bias correction needed???
+    chi2 = tf.reduce_sum(tf.square(C))
+    return chi2
 
-#	tf.set_random_seed(round(time()))
-	if Z == None:
-		Z = tf.random_uniform([FLAGS.batch_size, FLAGS.hidden_size])
-
-	return (pt.wrap(Z).
-	        reshape([FLAGS.batch_size, 1, 1, FLAGS.hidden_size]).
-	        deconv2d(4, 128, stride=1,edges='VALID'). # 4*4
-                batch_normalize().
-                relu().
-                #tf.nn.deconv2d(4,64,stride=2
-	        deconv2d(5, 64, stride=2,edges='VALID'). #11*11
-                batch_normalize().
-                relu().
-	        deconv2d(4, 32, stride=2,edges='VALID'). #24*24
-                #deconv2d(4, 64, stride=3).
-	        deconv2d(5, 1, stride=1,edges='VALID',activation_fn=tf.nn.sigmoid). # 16*16
-	        flatten()).tensor
-
-
-def chi2_loss(Xn, Yn):
-	C = tf.matmul(Xn, Yn, transpose_a=True) / (2 * FLAGS.batch_size)  # bias correction needed???
-	chi2 = tf.reduce_sum(tf.square(C))
-	return chi2
 
 mnist = input_data.read_data_sets("~/gits/dontstarve/frey-chi2-net-code/MNIST_data/", one_hot=True)
 input_tensor = tf.placeholder(tf.float32, [FLAGS.batch_size, FLAGS.dim])
@@ -203,85 +189,75 @@ gener_record = list()
 def sigmoid(x):
 	return 1 / (1 + np.exp(-x))
 
+lr_discr = 1e-3
+lr_gener = 1e-4
+
+max_epoch = 200
+updates_per_epoch = 1000
+# max_epoch = 10
+# updates_per_epoch = 100
+# max_epoch = 500
+# updates_per_epoch = 100
+
+epoch_record = np.zeros([max_epoch,])
+epoch_record_d = np.zeros([max_epoch,])
+
 for epoch_id in range(max_epoch):
+    
+    loss_record = np.zeros([updates_per_epoch,])
+    loss_record_d = np.zeros([updates_per_epoch,])
+    
+    t0 = time()
+    
+    for step in range(updates_per_epoch):
+        msize = FLAGS.batch_size
+        x, _ = mnist.train.next_batch(batch_size=msize)
 
-	loss_record_train = np.zeros([updates_per_epoch, ])
-        loss_record_test = np.zeros([updates_per_epoch, ])
+#         x,_ = frey_data.next_batch(FLAGS.batch_size)
+        
+        _,loss_val_d,_ = sess.run([train_gan_discr,discr_loss,maintain_averages_op],
+                    {input_tensor: x, learning_rate: lr_discr})
+        
+        _,loss_val_g,_ = sess.run([train_gan_gener,gener_loss,maintain_averages_op], 
+                    {input_tensor: x, learning_rate: lr_gener})
+        
+        loss_record[step] = loss_val_g
+        loss_record_d[step] = loss_val_d
+        
+    t1 = time()
+    
+    print([epoch_id+1,np.mean(loss_record),t1-t0])
+    epoch_record[epoch_id] = np.mean(loss_record)
+    print(epoch_id)
+    
+    if(epoch_id%50 ==0):
+        batch_idx = np.random.randint(np.shape(x)[0],size=[FLAGS.batch_size,])
 
-	t0 = time()
+        plt.subplot(1,2,1)
+        show_img(x[batch_idx],M=5,size=[28,28])
+        _ = plt.title('Real samples')
 
-	for step in range(updates_per_epoch):
-		x,_ = mnist.train.next_batch(FLAGS.batch_size)
+        plt.subplot(1,2,2)
+        x1 = sess.run(generated_tensor)
+        show_img(x1,M=5,size=[28,28])
+        _ = plt.title('Generated Samples')
 
-		_, loss_val_train, _ = sess.run([train_gan_discr, discr_loss, maintain_averages_op],
-		                          {input_tensor: x, learning_rate: lr_discr})
-
-		_, loss_val_test, _ = sess.run([train_gan_gener, gener_loss, maintain_averages_op],
-		                          {input_tensor: x, learning_rate: lr_gener})
-
-		loss_record_train[step] = loss_val_train
-                loss_record_test[step] = loss_val_test
-
-	t1 = time()
-
-	print([epoch_id + 1, np.mean(loss_record_train), np.mean(loss_record_test)])
-	epoch_record[epoch_id] = np.mean(loss_record_test)
-	print(epoch_id)
-	if(epoch_id%print_epoch==0):
-		Dn_val = sigmoid(sess.run(Dn, {input_tensor: x}))
-		# _ = plt.hist(Dn_val)
-		label_np = np.concatenate((np.ones([FLAGS.batch_size, 1]), \
-		                           -np.ones([FLAGS.batch_size, 1])))
-		_ = plt.plot(label_np, Dn_val, 'sg', alpha=.3)
-		_ = plt.xlim([-1.5, 1.5])
-		_ = plt.ylim([-.05, 1.05])
-		# print(Dn_val)
-
-		# print(np.dot(Dn_val.T,label_np)/(2*FLAGS.batch_size))
-
-		# gener_loss_tf = sess.run(gener_loss,{input_tensor: x})
-		# print(gener_loss_tf)
-
-
-
-
-		# batch_idx = np.random.randint(np.shape(frey_full)[0],size=[FLAGS.batch_size,])
-		#
-		# plt.subplot(1, 2, 1)
-		# # show_img(frey_full[batch_idx],M=5,size=[28,20])
-		# x1 = sess.run(generated_tensor)
-		# show_img(x1, M=5, size=[28, 28])
-		# _ = plt.title('Real samples')
-
-		gener_samples = np.zeros([MLOOP*FLAGS.batch_size,])
-		for mloop in range(MLOOP):
-		    y = sess.run(generated_tensor)
-		    gener_samples[mloop*FLAGS.batch_size:(mloop+1)*FLAGS.batch_size] = np.reshape(y,[FLAGS.batch_size,])
-		gener_record.append(gener_samples)
-		
-		fig1 = plt.figure(figsize=(28, 28))
-		plt.subplot(1,2,1)
-		x1 = sess.run(generated_tensor)
-		show_img(x1, M=5, size=[28, 28])
-		plt.subplot(1,2,2)
-		x2 = sess.run(generated_tensor)
-		show_img(x2, M=5, size=[28, 28])
-		_ = plt.title('Generated Samples')
+		plt.plot(epoch_record)
 		plt.savefig('./result/mnist3/{}_gen.png'.format(epoch_id))
 		# plt.show()
 		# Draw 10000 generated samples and compare with the original data
 
-		num_sampl = 10000
-		max_epoch = np.int(np.floor(num_sampl / FLAGS.batch_size))
+		# num_sampl = 10000
+		# max_epoch = np.int(np.floor(num_sampl / FLAGS.batch_size))
 
-		frey_generated = np.zeros([num_sampl, FLAGS.dim])
+		# frey_generated = np.zeros([num_sampl, FLAGS.dim])
 
-		for step in range(max_epoch + 1):
-			batch_idx = range(step * FLAGS.batch_size, np.min([(step + 1) * FLAGS.batch_size, num_sampl]))
+		# for step in range(max_epoch + 1):
+		# 	batch_idx = range(step * FLAGS.batch_size, np.min([(step + 1) * FLAGS.batch_size, num_sampl]))
 
-			x = sess.run(generated_tensor_test)
+		# 	x = sess.run(generated_tensor_test)
 
-			frey_generated[batch_idx, :] = x[:np.size(batch_idx), :]
+		# 	frey_generated[batch_idx, :] = x[:np.size(batch_idx), :]
 
 _ = plt.plot(epoch_record)
 
